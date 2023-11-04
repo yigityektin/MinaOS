@@ -31,7 +31,14 @@ pub struct Config {
     blk_size: u32,
     topology: Topology,
     writeback: u8,
-    unused: [u8; 3],
+    unused0: [u8; 3],
+    max_discard_sector: u32,
+    max_discard_seg: u32,
+    discard_sector_alignment: u32,
+    max_write_zeroes_sectors: u32,
+    max_write_zeroes_seg: u32,
+    write_zeroes_may_unmap: u8,
+    unused1: [u8, 3],
 }
 
 #[repr(C)]
