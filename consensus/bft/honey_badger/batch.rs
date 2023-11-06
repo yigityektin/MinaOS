@@ -24,23 +24,23 @@ impl<C, N: NodeIdT> Batch<C, N> {
         self.era
     }
 
-    pub fn change(&self) -> ChangeState<N> {
-        self.change
+    pub fn change(&self) -> &ChangeState<N> {
+        &self.change
     }
 
-    pub fn public_keys(&self) -> PubKeyMap<N> {
-        self.pub_keys
+    pub fn public_keys(&self) -> &PubKeyMap<N> {
+        &self.pub_keys
     }
 
-    pub fn network_info(&self) -> Arc<NetworkInfo<N>> {
-        self.netinfo
+    pub fn network_info(&self) -> &Arc<NetworkInfo<N>> {
+        &self.netinfo
     }
 
     pub fn contributions(&self) -> impl Iterator<Item = (&N, &C)> {
         self.contributions.iter()
     }
 
-    pub  fn iter<a>(&a self) -> impl Iterator<Item = <&a C as IntoIterator>::Item> where &a C: IntoIterator, {
+    pub  fn iter<'a>(&'a self) -> impl Iterator<Item = <&'a C as IntoIterator>::Item> where &'a C: IntoIterator, {
         self.contributions.values().flatten()
     }
 
