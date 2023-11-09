@@ -2,6 +2,7 @@ mod batch;
 mod builder;
 mod change;
 mod dynamic_honey_badger;
+mod votes;
 
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
