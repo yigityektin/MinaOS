@@ -138,8 +138,14 @@ pub fn read(bdev: usize, inode: &Inode, buffer: *mut u8, size: u32, offset: u32)
 
     let mut bytes_read = 0u32;
     let mut block_buffer = Buffer::new(BLOCK_SIZE as usize);
+
     let mut indirect_buffer = Buffer::new(BLOCK_SIZE as usize);
-    let mut izones = indirect_buffer.get() as *const u32;
+    let mut iindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
+    let mut iiindirect_buffer = Buffer::new(BLOCK_SIZE as usize);
+
+    let izones = indirect_buffer.get() as *const u32;
+    let iizones = iindirect_buffer.get() as *const u32;
+    let iiizones = iiindirect_buffer.get() as *const u32;
 
     for i in 0..7 {
         if inode.zones[i] == 0 {
@@ -202,11 +208,11 @@ pub fn read(bdev: usize, inode: &Inode, buffer: *mut u8, size: u32, offset: u32)
         unsafe {
             for i in 0..NUM_IPTRS {
                 if izones.add(i).read() != 0 {
-                    syc_read(bdev, indirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
+                    syc_read(bdev, iindirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
                     for j in 0..NUM_IPTRS {
-                        if izones.add(j).read() != 0 {
+                        if iizones.add(j).read() != 0 {
                             if offset_block <= block_seen {
-                                syc_read(bdev, block_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(j).read());
+                                syc_read(bdev, block_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * iizones.add(j).read());
                                 let read_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
                                     bytes_left
                                 }
@@ -238,14 +244,14 @@ pub fn read(bdev: usize, inode: &Inode, buffer: *mut u8, size: u32, offset: u32)
         unsafe {
             for i in 0..NUM_IPTRS {
                 if izones.add(i).read() != 0 {
-                    syc_read(bdev, indirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
+                    syc_read(bdev, iindirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(i).read());
                     for j in 0..NUM_IPTRS {
-                        if izones.add(j).read() != 0 {
-                            syc_read(bdev, indirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(j).read());
+                        if iizones.add(j).read() != 0 {
+                            syc_read(bdev, iiindirect_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * iizones.add(j).read());
                             for k in 0..NUM_IPTRS {
-                                if izones.add(k).read() != 0 {
+                                if iiizones.add(k).read() != 0 {
                                     if offset_block <= block_seen {
-                                        syc_read(bdev, block_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * izones.add(k).read());
+                                        syc_read(bdev, block_buffer.get_mut(), BLOCK_SIZE, BLOCK_SIZE * iiizones.add(k).read());
                                         let read_this_many = if BLOCK_SIZE - offset_byte > bytes_left {
                                             bytes_left
                                         }
