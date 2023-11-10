@@ -127,3 +127,102 @@ impl<N: Ord> SignedVote<N> {
         &self.voter
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::iter;
+    use std::sync::Arc;
+    use rand::{rngs, Rng};
+    use super::{Change, FaultKind, SecretKey, SignedVote, VoteCounter};
+    use crate::{fault_log::FaultLog, to_pub_keys};
+
+    fn setup(node_num: usize, era: u64) -> (Vec<VoteCounter<usize>>, Vec<Vec<SignedVote<usize>>>) {
+        let mut rng = rngs::OsRng::new().expect("Couldn't initialize osrng");
+        let sec_keys:BTreeMap<_, SecretKey> = (0..node_num).map(|id| (id, rng.gen())).collect();
+        let pub_keys = to_pub_keys(&sec_keys);
+
+        let create_counter = |(id, sk)| VoteCounter::new(id, sk, pub_keys.clone(), era);
+        let mut counters: Vec<_> = sec_keys.into_iter().map(create_counter).collect();
+
+        let sign_votes = |counter: &mut VoteCounter<usize>| {
+            (0..node_num)
+                .map(|j| Change::NodeChange(Arc::new(iter::once((j, pub_keys[&j])).collect())))
+                .map(|change| counter.sing_vote_for(change).expect("sign vote").clone())
+                .collect::<Vec<_>>()
+        };
+        let signed_votes: Vec<_> = counters.iter_mut().map(sign_votes).collect();
+        (counters, signed_votes)
+    }
+
+    #[test]
+    fn test_pending_votes() {
+        let node_num = 4;
+        let era = 5;
+        let (mut counters, sv) = setup(node_num, era);
+        let ct = &mut counters[0];
+
+        let faults = ct
+            .add_pending_vote(&1, sv[1][2].clone())
+            .expect("add pending");
+        assert!(faults.is_empty());
+        let fake_vote = SignedVote {
+            sig: sv[2][1].sig.clone(),
+            ..sv[3][1].clone()
+        };
+        let faults = ct.add_pending_vote(&1, fake_vote).expect("Add pending");
+        let expected_faults = FaultLog::init(1, FaultKind::InvalidVoteSignature);
+        assert_eq!(faults, expected_faults);
+        assert_eq!(
+            ct.pending_votes().collect::<Vec<_>>(),
+            vec![&sv[0][3], &sv[1][2], &sv[2][1]]
+        );
+
+        let faults = ct
+            .add_pending_vote(&3, sv[1][1].clone())
+            .expect("add pending");
+        assert!(fault.is_empty());
+        let faults = ct
+            .add_pending_vote(&1, sv[2][2].clone())
+            .expect("add pending");
+        assert!(faults.is_empty());
+        assert_eq!(
+            ct.pending_votes().collect::<Vec<_>>(),
+            vec![&sv[0][3], &sv[1][2], &sv[2][2]]
+        );
+
+        let vote_batch = vec![sv[1][3].clone(), sv[2][1].clone(), sv[0][3].clone()];
+        ct.add_committed_votes(&1, vote_batch)
+            .expect("add committed");
+        assert_eq!(ct.pending_votes().collect::<Vec<_>>(), vec![&sv[2][2]]);
+    }
+
+    #[test]
+    fn test_committed_votes() {
+        let node_num = 4;
+        let era = 5;
+        let (mut counters, sv) = setup(node_num, era);
+        let ct = &mut counters[0];
+
+        let mut vote_batch = vec![sv[1][1].clone()];
+        vote_batch.push(SignedVote {
+            sig: sv[2][1].sig.clone(),
+            ..sv[3][1].clone()
+        });
+        let faults = ct
+            .add_committed_votes(&1, vote_batch)
+            .expect("add committed");
+        let expected_faults = FaultLog::init(1, FaultKind::InvalidCommittedVote);
+        assert_eq!(faults, expected_faults);
+        assert_eq!(ct.compute_winner(), None);
+
+        let faults = ct
+            .add_committed_vote(&1, sv[2][1].clone())
+            .expect("add committed");
+        assert!(faults.is_empty());
+        match ct.compute_winner() {
+            Some(Change::NodeChange(pub_keys)) => assert!(pub_keys.keys().eq(iter::onec(&1))),
+            winner => panic!("Winner: {:?}", winner),
+        }
+    }
+}
